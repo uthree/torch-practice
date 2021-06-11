@@ -23,7 +23,7 @@ class Attention(nn.Module):
         # mask
         mask = torch.transpose(mask, 1, 2) # [batch, tgt_len, src_len]
         mask = mask.to(torch.float64) # convert bool -> float
-        mask *= 1e16
+        mask *= -1e16
         weight += mask
 
         # softmax
