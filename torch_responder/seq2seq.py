@@ -19,10 +19,12 @@ class LSTMEncoder(nn.Module):
         super(LSTMEncoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_idx)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=0.5, bidirectional=True)
+        self.bi2uni = nn.Linear(hidden_dim*2, hidden_dim)
 
     def forward(self, x):
         x = self.embedding(x)
         output, state = self.lstm(x)
+        output = self.bi2uni(output)
         h, c = state
         h = torch.sum(torch.stack(torch.split(h, 2, dim=0)), 1, keepdim=False)
         c = torch.sum(torch.stack(torch.split(c, 2, dim=0)), 1, keepdim=False)
@@ -37,10 +39,10 @@ class LSTMDecoder(nn.Module):
         self.attn = attention.Attention(hidden_dim, hidden_dim)
         self.linear = nn.Linear(hidden_dim, vocab_size)
 
-    def forward(self, src, tgt, state):
+    def forward(self, src, tgt, state, mask):
         tgt = self.embedding(tgt)
         output, state = self.lstm(tgt, state)
-        output = self.attn(src, output)
+        output, w = self.attn(src, output, mask)
         output = self.linear(output)
         return output, state
 
@@ -51,9 +53,9 @@ class Seq2SeqModule(nn.Module):
         self.encoder = LSTMEncoder(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_dim=hidden_dim, padding_idx=padding_idx, num_layers=num_layers)
         self.decoder = LSTMDecoder(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_dim=hidden_dim, padding_idx=padding_idx, num_layers=num_layers)
 
-    def forward(self, x, tgt):
+    def forward(self, x, tgt, mask):
         output, state = self.encoder(x)
-        decoder_output, _ = self.decoder(output, tgt, state)
+        decoder_output, _ = self.decoder(output, tgt, state, mask)
         return decoder_output
 
 
@@ -111,8 +113,10 @@ class Seq2SeqResponder:
                     input_tensor, tgt_tensor = torch.LongTensor(input_batch[i]).to(device), torch.LongTensor(output_batch[i]).to(device)
 
                     src_tensor = self.tgt2src(tgt_tensor)
-                
-                    output_tensor = self.s2s(input_tensor, src_tensor)
+
+                    mask = torch.tensor(attention.generate_mask(input_tensor.size(1), src_tensor.size(1))).to(device)
+                    #print(mask.size(), input_tensor.size(), src_tensor.size())
+                    output_tensor = self.s2s(input_tensor, src_tensor, mask)
 
                     loss = 0
                     for j in range(input_tensor.size(1)):
@@ -158,21 +162,21 @@ class Seq2SeqResponder:
         results = []
         with torch.no_grad():
             for i in range(0, len(input_batch)):
-                batch_tmp = []
                 input_tensor = torch.LongTensor(input_batch[i]).to(device)
                 src_tensor = torch.full((input_tensor.size(0), 1), self.padding_idx+5).to(device)
+                batch_tmp = torch.full((input_tensor.size(0), 1), self.padding_idx+5).to(device)
                 output, state = self.s2s.encoder(input_tensor)
                 h, c = state
                 h += (torch.randn(h.size()).to(device) - 0.5) * noise_gain
                 c += (torch.randn(c.size()).to(device) - 0.5) * noise_gain
+                mask = torch.zeros(input_tensor.size(1), src_tensor.size(1)).to(device)
                 state = (h, c)
                 decoder_hidden = state
-                for j in range(0, input_tensor.size(1)):
-                    decoder_output, decoder_hidden = self.s2s.decoder(src_tensor, decoder_hidden)
+                for j in range(1, input_tensor.size(1)):
+                    decoder_output, decoder_hidden = self.s2s.decoder(output, batch_tmp, decoder_hidden, mask)
                     decoder_output = torch.argmax(decoder_output, dim=2)
-                    src_tensor = decoder_output
-                    batch_tmp.append(decoder_output)
-                batch_tmp = torch.cat(batch_tmp, dim=1)
+                    #print(batch_tmp.size(), decoder_output.size())
+                    batch_tmp = torch.cat([batch_tmp, decoder_output[:, -1:]], dim=1)
                 results.append(batch_tmp)
             results = torch.cat(results)
         return results

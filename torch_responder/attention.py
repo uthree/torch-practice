@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+import numpy as np
+
+
 # source target attention
 class Attention(nn.Module):
     def __init__(self, input_dim, output_dim):
@@ -18,6 +21,8 @@ class Attention(nn.Module):
 
         # transpose
         t_src = torch.transpose(src, 1, 2) # [batch, input_dim, src_len]
+        #print("ATTN")
+        #print(tgt.size(), t_src.size())
         weight = torch.bmm(tgt, t_src) # [batch, tgt_len, src_len]
         
         # mask
@@ -33,6 +38,21 @@ class Attention(nn.Module):
         output = torch.cat([weight_sum, tgt], dim=2)
         output = self.linear(output)
         return output, weight
+
+
+def generate_mask(width, height):
+    arr = []
+    for y in range(0, height):
+        buff = []
+        for x in range(0, width):
+            if x > y:
+                buff.append(True)
+            else:
+                buff.append(False)
+        arr.append(buff)
+    return np.array(arr)
+
+
 
 ## DEBUG CODES
 #attn = Attention(20, 20)
