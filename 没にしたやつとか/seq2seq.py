@@ -17,19 +17,20 @@ class AttentionEncoderLayer(nn.Module):
         output = self.bi2uni(output)
         output, _ = self.attn(output, output, src_mask)
         output += src # skip connection
+        state = torch.sum(torch.stack(torch.split(state, 2, dim=0)), 1, keepdim=False) # bi-directional state -> uni-directional state
         return output, state
 
 class AttentionDecoderLayer(nn.Module):
     def __init__(self, depth, hidden_dim):
         super(AttentionDecoderLayer, self).__init__()
         self.gru = nn.GRU(depth, hidden_dim, batch_first=True)
-        self.attn = Attention(depth, hidden_dim)
-        self.self_attn_gru = AttentionEncoderLayer(depth, hidden_dim)
+        self.t_attn = Attention(depth, hidden_dim)
+        self.st_attn = Attention(depth, hidden_dim)
 
     def forward(self, src, tgt, state, tgt_mask, src_tgt_mask):
-        tgt, state = self.self_attn_gru(tgt, state, tgt_mask) # tgt self attention.
         tgt = self.gru(tgt, state)
-        tgt = self.attn(src, tgt, src_tgt_mask)
+        tgt = self.t_attn(tgt, tgt, tgt_mask)
+        tgt = self.st_attn(src, tgt, src_tgt_mask)
         return tgt
         
 
@@ -42,7 +43,6 @@ ssm = torch.zeros((5, 5))
 o, s = el(i, s, ssm)
 print(o.size(), s.size())
 
-s = torch.sum(s, dim=1) # bi-directional state -> uni-directional state
 
 t = torch.randn((7, 6, 10))
 ttm = torch.zeros(6, 6)
