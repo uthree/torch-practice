@@ -9,7 +9,7 @@ def main():
     else:
         model = Seq2SeqResponder()
     while True:
-        print("BOT >" + model.predict_from_sentences([input("USER> ")], noise_gain=0.2)[0])
+        print("BOT >" + model.predict_from_sentences([input("USER> ")], noise_gain=0)[0])
 
 if __name__ == '__main__':
     main()

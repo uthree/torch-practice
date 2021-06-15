@@ -11,7 +11,7 @@ class Attention(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(Attention, self).__init__()
         self.linear = nn.Linear(input_dim*2, output_dim)
-        self.softmax = nn.Softmax(dim=1)
+        self.softmax = nn.Softmax(dim=2)
 
     def forward(self, src, tgt, mask): #TODO: write mask
         # src    : [batch, src_len, input_dim]
