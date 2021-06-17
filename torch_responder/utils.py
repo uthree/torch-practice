@@ -1,5 +1,8 @@
 # utilites
+from sklearn.utils import shuffle
+
 def train2batch(x, y, batch_size=100):
+    x, y = shuffle(x, y)
     rx, ry = [], []
     for i in range(0, len(x), batch_size):
         rx.append(x[i:i+batch_size])
